@@ -1,0 +1,42 @@
+调试
+一个命令行窗口输入：make qemu-gdb
+新打开一个窗口：输入gdb-multiarch
+
+若是第一次使用的话会发现没有加载.gdbinit文件, 解决方法就是根据提示在用户主目录下创建一个.gdbinit文件,写入并保存
+	add-auto-load-safe-path /home/maple/MIT6.S081/xv6-labs-2020/.gdbinit
+当然也可以使用命令行命令来处理上面文件创建及保存过程: 
+	echo add-auto-load-safe-path /home/maple/MIT6.S081/xv6-labs-2020/.gdbinit >> ~/.gdbinit
+再次重新执行gdb-multiarch即可
+
+part 1: trace
+系统调用: syscall通过系统调用号调用相应的系统函数,syscall可以看成对系统调用的一个包装函数
+首先, 
+	在Makfile里添加$U/_trace\	
+	在user.h文件里添加trace的声明,trace.c需要调用trace函数
+	在user/suys.pl里添加stub, 即entry("trace"), 还不清楚这个到底是干啥的
+      	在kernel/syscall.h添加一个系统调用号,即宏定义, #define SYS_trace 22
+其次	
+	在proc.h里添加变量trace_mask
+  	在kernel/sysproc.c里实现sys_trace(),即设置trace_mask为trace函数的参数
+  	修改kernel/syscall.c里的 syscall(),满足trace_mask条件则输出打印trace
+ 最后	
+ 	修改fork, 在子进程的proc中拷贝trace_mask 	  
+
+part 2: sysinfo
+首先, 	
+	在Makfile里添加$U/_sysinfotest\	
+	在user.h文件里添加sysinfo的声明,sysinfotest.c需要调用sysinfo函数, struct sysinfo；int sysinfo(struct sysinfo*);
+	在user/suys.pl里添加stub, 即entry("sysinfo"), 还不清楚这个到底是干啥的
+      	在kernel/syscall.h添加一个系统调用号,即宏定义, #define SYS_sysinfo 23
+其次
+	往kernel/kalloc里添加一个辅助函数,获取free memory, 在kenerl/kalloc里有一个单链表记录了free page, 遍历该链表累计即可
+	往kenerl/proc里添加一个辅助函数,获取当前进程个数, 在该文件里,有一个proc数组记录了没一个进程,遍历累加即可
+	将上面两个函数的声明添加到defs.h里
+  	在kernel/sysproc.c里实现sys_sysinfo(),仿照sys_fstat() (kernel/sysfile.c) 和 filestat() (kernel/file.c),使用copyout拷贝相关信息到函数对应的参数里
+  	因为用到了struct sysinfo, 所以记得包含头文件sysinfo.h
+最后
+	make qemu 
+	sysinfotest 
+	打印出ok,结束
+	也可以运行/grade-lab-syscall sysinfotest来检测结果
+(具体实现请参考代码)

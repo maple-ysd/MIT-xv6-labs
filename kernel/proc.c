@@ -295,6 +295,8 @@ fork(void)
 
   np->state = RUNNABLE;
 
+  np->trace_mask = p->trace_mask;
+
   release(&np->lock);
 
   return pid;
@@ -692,4 +694,19 @@ procdump(void)
     printf("%d %s %s", p->pid, state, p->name);
     printf("\n");
   }
+}
+
+// count process number 
+int 
+proc_count()
+{
+  struct proc *p;
+  int n = 0;
+  for(p = proc; p < &proc[NPROC]; p++) {
+    acquire(&p->lock);
+    if(p->state != UNUSED)
+      ++n;
+    release(&p->lock);
+  }
+  return n;
 }
