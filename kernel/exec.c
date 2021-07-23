@@ -75,6 +75,11 @@ exec(char *path, char **argv)
   sp = sz;
   stackbase = sp - PGSIZE;
 
+  // add mapping into kernel page table
+  // note here is still in kernel, even if one of the two pages allocated is invisible for users
+  if (u2kvmcopy(pagetable, p->kpagetable, 0, sz) < 0)
+    goto bad;
+  
   // Push argument strings, prepare rest of stack in ustack.
   for(argc = 0; argv[argc]; argc++) {
     if(argc >= MAXARG)
@@ -107,7 +112,7 @@ exec(char *path, char **argv)
     if(*s == '/')
       last = s+1;
   safestrcpy(p->name, last, sizeof(p->name));
-    
+      
   // Commit to the user image.
   oldpagetable = p->pagetable;
   p->pagetable = pagetable;
@@ -117,10 +122,11 @@ exec(char *path, char **argv)
   proc_freepagetable(oldpagetable, oldsz);
   
   // print page table for the first process
-  if(p->pid==1) vmprint(p->pagetable);
-  
+  printf("user page table:**********************************************************************\n");
+  if(p->pid==2) vmprint(p->pagetable);
+  printf("kernel page table:********************************************************************\n");
+  if(p->pid==2) vmprint(p->kpagetable);
   return argc; // this ends up in a0, the first argument to main(argc, argv)
-
  bad:
   if(pagetable)
     proc_freepagetable(pagetable, sz);

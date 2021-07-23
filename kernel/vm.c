@@ -424,7 +424,8 @@ copyout(pagetable_t pagetable, uint64 dstva, char *src, uint64 len)
 int
 copyin(pagetable_t pagetable, char *dst, uint64 srcva, uint64 len)
 {
-  uint64 n, va0, pa0;
+  return copyin_new(pagetable, dst, srcva, len);
+  /*uint64 n, va0, pa0;
 
   while(len > 0){
     va0 = PGROUNDDOWN(srcva);
@@ -440,7 +441,7 @@ copyin(pagetable_t pagetable, char *dst, uint64 srcva, uint64 len)
     dst += n;
     srcva = va0 + PGSIZE;
   }
-  return 0;
+  return 0;*/
 }
 
 // Copy a null-terminated string from user to kernel.
@@ -450,6 +451,8 @@ copyin(pagetable_t pagetable, char *dst, uint64 srcva, uint64 len)
 int
 copyinstr(pagetable_t pagetable, char *dst, uint64 srcva, uint64 max)
 {
+  return copyinstr_new(pagetable, dst, srcva, max);
+  /*
   uint64 n, va0, pa0;
   int got_null = 0;
 
@@ -483,7 +486,7 @@ copyinstr(pagetable_t pagetable, char *dst, uint64 srcva, uint64 max)
     return 0;
   } else {
     return -1;
-  }
+  } */
 }
 
 // printf page table
@@ -491,7 +494,7 @@ static void
 vmprint_help(pagetable_t pagetable, int level)
 {
   // there are 2^9 = 512 PTEs in a page table.
-  for(int i = 0; i < 512; i++){
+  for(int i = 0; i < 5; i++){
     pte_t pte = pagetable[i];
     if (pte & PTE_V){
       uint64 child = PTE2PA(pte);
@@ -511,4 +514,21 @@ vmprint(pagetable_t pagetable)
 {
   printf("page table %p\n", pagetable);
   vmprint_help(pagetable, 0);
+}
+
+// 
+int
+u2kvmcopy(pagetable_t pagetable, pagetable_t kpagetable, uint64 oldsz, uint64 newsz)
+{
+  pte_t *pte_u, *pte_k;
+  if ((newsz < oldsz) || (newsz > PLIC))
+    return -1;
+  for (uint64 va = PGROUNDUP(oldsz); va < newsz; va += PGSIZE){
+    if ((pte_u = walk(pagetable, va, 0)) == 0)
+      panic("u2kvmcopy: walk failed\n");
+    if ((pte_k = walk(kpagetable, va, 1)) == 0)
+      panic("u2kvmcopy: walk failed\n");
+    *pte_k = (*pte_u) & (~PTE_U);
+  } 
+  return 0; 
 }

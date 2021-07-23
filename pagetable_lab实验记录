@@ -1,0 +1,42 @@
+page table lab
+
+part 1 
+打印页表
+
+第一步
+	在kernel/vm.c里定义vmprint函数,参考freewalk递归实现
+	提示: %p可用于打印16进制地址(16位)
+第二步	
+	在defs.h声明该函数, 在exec.c return argc之前调用该函数即可
+	
+part 2
+为每个进程创建一个内核页表
+
+在part2之前,进程只有用户页表,内核部分被记录在全局内核页表上,即kernel_pagetable(kernel/vm.c), 因此
+第一步
+	在进程结构proc里添加一个内核页表指针: pagetable_t kpagetable;
+第二步
+	仿照kvminit,定义proc_kpagetable()函数,生成进程私有的内核页表,并返回内核页表指针
+	在allocproc里调用该函数,用proc_kpagetable()返回的页表指针初始化kpagetable
+第三步
+	修改procinit,把内核栈的分配部分移到allocproc,只有当分配进程的时候才去分配这个内核栈
+第四步
+	修改scheduler函数,设置satp为进程的内核页表,当程序运行完,重置为全局内核页表
+第五步
+	定义proc_freekpagetable(可参考freewalk), 递归检查并取消页表叶子处的映射
+	最后递归删除该页表.
+	内核栈的删除在调用该函数之前执行
+第六步
+	在vm.c的kvmpa函数修改一下walk使用的页表(全局内核页表->进程的内核页表),这一步着实没意识到(不改的话,make qemu后还是得改)
+最后
+	在defs.h里添加自己定义的函数声明,注意这些由自己定义的函数名可以随意取,不过最好有意义,还有添加etext在proc.c里的声明
+另外,网上看到在kvminit_proc里要删除CLINT项,不是很理解,所以我这里没有去掉该项(当然测试仍然可以通过). (备注: 当前不删除没问题,part3还是要删除,因为该虚拟地址之后可能会被占用)
+
+Part 3
+
+第一步
+	修改copyin, copyinstr, 使用copyin_new, copyinstr_new替换其实现
+第二步
+	定义一个函数u2kvmcopy,将用户页表添加到内核页表
+	在userinit, fork, exec, growproc里, 当用户页表添加新的PTE时,也给内核页表添加上
+注意事项: 每次拷贝用户页表到内核页表时,一定要搞清楚每个pagetable符号的含义,不然就真的写时一时爽,debug火葬场......(亲身经历,哭死...)
