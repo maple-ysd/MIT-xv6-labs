@@ -494,7 +494,7 @@ static void
 vmprint_help(pagetable_t pagetable, int level)
 {
   // there are 2^9 = 512 PTEs in a page table.
-  for(int i = 0; i < 5; i++){
+  for(int i = 0; i < 512; i++){
     pte_t pte = pagetable[i];
     if (pte & PTE_V){
       uint64 child = PTE2PA(pte);

@@ -122,10 +122,7 @@ exec(char *path, char **argv)
   proc_freepagetable(oldpagetable, oldsz);
   
   // print page table for the first process
-  printf("user page table:**********************************************************************\n");
-  if(p->pid==2) vmprint(p->pagetable);
-  printf("kernel page table:********************************************************************\n");
-  if(p->pid==2) vmprint(p->kpagetable);
+  if(p->pid==1) vmprint(p->pagetable);
   return argc; // this ends up in a0, the first argument to main(argc, argv)
  bad:
   if(pagetable)
