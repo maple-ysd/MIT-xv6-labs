@@ -93,7 +93,7 @@ static struct proc*
 allocproc(void)
 {
   struct proc *p;
-
+  
   for(p = proc; p < &proc[NPROC]; p++) {
     acquire(&p->lock);
     if(p->state == UNUSED) {
@@ -105,13 +105,27 @@ allocproc(void)
   return 0;
 
 found:
-  p->pid = allocpid();
 
+  p->alarm_interval = 0;
+  p->alarm_tickscount = 0;
+  p->alarm_handler = 0;
+  p->handler_running = 0;
+
+  p->pid = allocpid();
+  
   // Allocate a trapframe page.
   if((p->trapframe = (struct trapframe *)kalloc()) == 0){
     release(&p->lock);
     return 0;
   }
+  
+  // Allocate a alarm_trapframe page.
+  if((p->alarm_trapframe = (struct trapframe *)kalloc()) == 0){
+    freeproc(p);
+    release(&p->lock);
+    return 0;
+  }
+  memset(p->alarm_trapframe, 0, PGSIZE);
 
   // An empty user page table.
   p->pagetable = proc_pagetable(p);
@@ -139,6 +153,9 @@ freeproc(struct proc *p)
   if(p->trapframe)
     kfree((void*)p->trapframe);
   p->trapframe = 0;
+  if(p->alarm_trapframe)
+    kfree((void*)p->alarm_trapframe);
+  p->alarm_trapframe = 0;
   if(p->pagetable)
     proc_freepagetable(p->pagetable, p->sz);
   p->pagetable = 0;

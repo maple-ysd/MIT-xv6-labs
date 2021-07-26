@@ -1,0 +1,47 @@
+backtrace:
+
+栈结构:
+
+......      <--- s0当前帧,存储在寄存器s0
+返回地址
+前一个帧的帧指针fp
+...被保存的寄存器
+...局部变量
+.		重复该结构
+.		重复该结构
+.		重复该结构
+
+严格按照hint来即可
+循环输出返回地址,循环条件PGROUNDDOWN(fp) < PGROUNDUP(fp)
+这样当fp不断往上回溯到该栈 页的起始位置结束
+
+Alarm
+
+test0
+
+	修改Makefile以编译alarmtest
+	在user/user.h里添加声明
+		int sigalarm(int ticks, void (*handler)());
+    		int sigreturn(void);
+    	修改user/usys.pl,kernel/syscall.h,kernel/syscall.c 以允许alarmtest调用sigalarm和sigreturn
+    	sys_sigalarm()保存alarm_interval和handler function,这就意味着需要在proc.h的proc结构里声明这两个变量,alarm_interval和alarm_handler,同时保存这两个变量到进程p中
+    	sys_sigreturn 直接返回0即可
+    	再增加一个变量alarm_tickscount用来说明距离上次调用handler function过了多少个tick
+    	在alloc_proc里将其初始化为0
+    	在if(which_dev == 2) ...这个条件下添加当(p->alarm_interval != 0 && alarm_interval == alarm_tickscount时,
+    	p->trapframe->epc = p->alarm_handler
+    	p->alarm_tickscount = 0
+        然后测试
+
+test1/test2
+要求handler function返回后能回到用户函数最初被时间中断的状态
+很多寄存器都需要保存
+	在proc.h的proc结构里增设一个alarm_trapframe(trapframe副本),以及一个handler_runnig标志
+	在allocproc里为其分配内存,并记得在freeproc里释放
+	当从用户函数时间中断进入trap时,若满足(p->alarm_interval != 0 && alarm_interval == alarm_tickscount)
+	则将trapframe拷贝一份到alarm_trapframe, handler_runnig置1
+	当sig_sigreturn未返回,而时间间隔再次到达,则此次不会被中断,而只是简单的将alarm_tickscount置0
+	
+	在sig_sigreturn里将alarm_trapframe复制给trapframe,并将alarm_trapframe置0(该步置0可以没有)
+	
+	测试(通过)
