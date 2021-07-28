@@ -1,0 +1,21 @@
+lazy allocation lab
+
+Part 1, Part 2
+参考B站MIT 6.S081 page fault 视频即可完成
+思想就是在使用sbrk分配内存时,只是简单的增加p->sz,即用户进程内存,而不立即分配空间
+在访存时会发生缺页异常,进入内核异常处理程序,因此需要在内核trap.c处理当r_scause == 13 || 15(读或写缺页)时,分配内存,添加映射到页表
+同时因为有些页没有分配内存空家,所以释放时当walk返回0或者walk返回的对应的pte的PTE_V == 0(比如磁盘文件(将来可能要写入物理内存),此前只是给一个pte并且将PTE_V置0), 因此需要将这两种情况的panic
+
+Part 3
+
+1. sys_sbrk函数参数小于0时应确保p->sz + n >= 0, 否则返回0即可
+2. 在trap.c之前加入的处理中加入判断当va >= p->sz时, p->killed 置1
+3. fork里调用了uvmcopy, uvmcopy又调用了walk,同样当walk返回0或者*pte & PTE_V == 0时,替换panic为continue
+4. 涉及读写用户空间虚拟地址,读写时调用sys_read或者sys_write进入内核,然后通过copyin或者copyout完成
+   copyin或者copyout寻址时使用walkaddr,因此修改walkaddr当缺页发生时,分配一页内存空间,建立映射,然后
+   完成读写, 而不是在内核引发异常,内核的异常不会进入usertrap函数而是会进入kerneltrap....
+5. 当kalloc分配失败时,杀死进程
+6. 确保va >= p->trapframe->sp,之前一直在想怎么找到sp,后来发现异常后陷入内核,trap.c,可以直接使用trapfram里保存的sp
+
+注意事项:
+   从umalloc拷贝代码时一定要仔细仔细再仔细,(一不小心就导致漫长的找bug过程)
