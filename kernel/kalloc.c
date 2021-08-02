@@ -23,11 +23,20 @@ struct {
   struct run *freelist;
 } kmem;
 
+struct {
+  struct spinlock lock;
+  int count[(PHYSTOP - KERNBASE)/PGSIZE + 1];
+} refcnt;
+
 void
 kinit()
 {
   initlock(&kmem.lock, "kmem");
   freerange(end, (void*)PHYSTOP);
+  
+  // initialize urefcount
+  initlock(&refcnt.lock, "refcnt");
+  memset(refcnt.count, 0, sizeof(refcnt.count));
 }
 
 void
@@ -50,10 +59,16 @@ kfree(void *pa)
 
   if(((uint64)pa % PGSIZE) != 0 || (char*)pa < end || (uint64)pa >= PHYSTOP)
     panic("kfree");
-
+  
+  acquire(&refcnt.lock);
+  if (--refcnt.count[((uint64)pa - KERNBASE)/PGSIZE] > 0){
+    release(&refcnt.lock);
+    return;
+  }
+  release(&refcnt.lock);
+    
   // Fill with junk to catch dangling refs.
   memset(pa, 1, PGSIZE);
-
   r = (struct run*)pa;
 
   acquire(&kmem.lock);
@@ -75,8 +90,31 @@ kalloc(void)
   if(r)
     kmem.freelist = r->next;
   release(&kmem.lock);
-
+  
+  if (r) {
+    acquire(&refcnt.lock);
+    refcnt.count[((uint64)r - KERNBASE)/PGSIZE] = 1;
+    release(&refcnt.lock);
+  }
+  
   if(r)
     memset((char*)r, 5, PGSIZE); // fill with junk
   return (void*)r;
+}
+
+int 
+get_ref(uint64 pa)
+{
+  int n;
+  acquire(&refcnt.lock);
+  n = refcnt.count[(pa - KERNBASE)/PGSIZE];
+  release(&refcnt.lock);
+  return n;
+}
+
+void increase_ref(uint64 pa)
+{
+  acquire(&refcnt.lock);
+  ++refcnt.count[(pa - KERNBASE)/PGSIZE];
+  release(&refcnt.lock);
 }
