@@ -44,8 +44,12 @@ freerange(void *pa_start, void *pa_end)
 {
   char *p;
   p = (char*)PGROUNDUP((uint64)pa_start);
-  for(; p + PGSIZE <= (char*)pa_end; p += PGSIZE)
+  for(; p + PGSIZE <= (char*)pa_end; p += PGSIZE){
+    acquire(&refcnt.lock);
+    refcnt.count[((uint64)p - KERNBASE)/PGSIZE] = 1;
+    release(&refcnt.lock);
     kfree(p);
+  }
 }
 
 // Free the page of physical memory pointed at by v,
