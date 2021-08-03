@@ -1,0 +1,40 @@
+thread lab
+
+Part 1
+
+刚看到这个实验时,有点懵,有个点卡住了,问题是分配给每个用户线程的栈该怎么使用呢???
+想了半天,恍然大迷瞪,xv6的内核栈的使用不就是简单的在swtch里将栈顶指针赋给sp吗,仅此而已.那么一切就通了
+
+思路也很简单,定义一下context,从proc.h拷贝一份过来,然后在thread里加上一个context成员来记录被保存时的上下文即寄存器
+thread_create, 初始化一下返回指针ra以及栈顶指针sp即可
+拷贝内核线程的切换swtch.S到uthread_switch.S
+然后在thread_schedule里调用一下uthread_switch保存当前用户线程上下文并切换到其他用户线程
+
+注意:这里不需要像xv6内核线程切换那样先从当前内核线程切换到scheduler线程然后再切换到新的线程,因为thread_schedule是函数调用,每次都函数起始位置开始
+另外uthread_switch只需要保存被调用者寄存器,调用者寄存器由函数调用过程保存
+
+Part 2
+
+见answers-thread.txt
+
+Part 3
+
+这个主要是实现在程序到达某一点后必须等待,一直等到其他线程都到达该点才能继续进行
+
+核心思想
+(算了直接上代码清晰明了)
+
+  pthread_mutex_lock(&lock);       // acquire lock
+  
+  ++bstate.nthread;
+  if (bstate.nthread < nthread){
+    pthread_cond_wait(&cond, &lock);  // go to sleep on cond, releasing lock mutex, acquiring upon wake up
+  }
+  else {
+    bstate.nthread = 0;
+    bstate.round += 1;
+    pthread_cond_broadcast(&cond);     // wake up every thread sleeping on cond
+  }
+  
+  pthread_mutex_unlock(&lock);	// do not forget release the lock
+

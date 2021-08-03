@@ -7,6 +7,10 @@
 static int nthread = 1;
 static int round = 0;
 
+pthread_mutex_t lock;
+pthread_cond_t cond = PTHREAD_COND_INITIALIZER;
+
+
 struct barrier {
   pthread_mutex_t barrier_mutex;
   pthread_cond_t barrier_cond;
@@ -20,6 +24,7 @@ barrier_init(void)
   assert(pthread_mutex_init(&bstate.barrier_mutex, NULL) == 0);
   assert(pthread_cond_init(&bstate.barrier_cond, NULL) == 0);
   bstate.nthread = 0;
+  bstate.round = 0;
 }
 
 static void 
@@ -30,6 +35,17 @@ barrier()
   // Block until all threads have called barrier() and
   // then increment bstate.round.
   //
+  pthread_mutex_lock(&lock);       // acquire lock
+  ++bstate.nthread;
+  if (bstate.nthread < nthread){
+    pthread_cond_wait(&cond, &lock);  // go to sleep on cond, releasing lock mutex, acquiring upon wake up
+  }
+  else {
+    bstate.nthread = 0;
+    bstate.round += 1;
+    pthread_cond_broadcast(&cond);     // wake up every thread sleeping on cond
+  }
+  pthread_mutex_unlock(&lock);
   
 }
 
@@ -42,6 +58,7 @@ thread(void *xa)
 
   for (i = 0; i < 20000; i++) {
     int t = bstate.round;
+    // printf("n = %ld, i = %d, t = %d\n", n, i, t);
     assert (i == t);
     barrier();
     usleep(random() % 100);
@@ -62,6 +79,9 @@ main(int argc, char *argv[])
     fprintf(stderr, "%s: %s nthread\n", argv[0], argv[0]);
     exit(-1);
   }
+  
+  pthread_mutex_init(&lock, NULL); // initialize the lock
+  
   nthread = atoi(argv[1]);
   tha = malloc(sizeof(pthread_t) * nthread);
   srandom(0);
