@@ -10,11 +10,13 @@
 #include "param.h"
 #include "stat.h"
 #include "spinlock.h"
-#include "proc.h"
 #include "fs.h"
+#include "proc.h"
 #include "sleeplock.h"
 #include "file.h"
 #include "fcntl.h"
+
+extern int writeback(struct VMA *vma, uint64 addr, int n);
 
 // Fetch the nth word-sized system call argument as a file descriptor
 // and return both the descriptor and the corresponding struct file.
@@ -484,3 +486,87 @@ sys_pipe(void)
   }
   return 0;
 }
+
+uint64 
+sys_mmap()
+{
+  // assume first parameter addr is 0 and ignore it;
+  uint64 addr, len, off;
+  int prot, flag, fd;
+  struct file *f;
+  if (argaddr(0, &addr) < 0 || argaddr(1, &len) < 0 || argint(2, &prot) < 0 || 
+      argint(3, &flag) < 0 || argfd(4, &fd, &f) < 0 || argaddr(5, &off) < 0) {
+    return -1;
+  }
+  // assume first parameter addr and second off is 0 and if not, ignore them;  
+  addr = 0;
+  off = 0;
+  
+  // check write permit
+  if (prot & PROT_WRITE && !f->writable && flag == MAP_SHARED) {
+    return -1;
+  }
+  struct proc *p = myproc();
+  uint64 newsz = p->sz + PGROUNDUP(len);
+  if (newsz >= MAXVA)
+    return -1;
+  addr = p->sz;
+  for (int i = 0; i < MAXVMA; ++i) {
+    if (p->vmas[i].used == 0) {
+      struct VMA *vma = &p->vmas[i];
+      vma->used = 1;
+      p->sz = newsz;
+      vma->addr = addr;
+      vma->len = len;
+      vma->prot = prot;
+      vma->flag = flag;
+      vma->file = f;
+      vma->off = off;
+      filedup(f);
+      return addr;
+    }
+  }
+  printf("sys_mmap: p->vmas is already full now\n");
+  return -1;
+}
+
+uint64
+sys_munmap()
+{
+  uint64 addr, len;
+  if (argaddr(0, &addr) < 0 || argaddr(1, &len) < 0)
+    return -1;
+  struct proc *p = myproc();
+  struct VMA *vma;
+  int i;
+  for (i = 0; i < MAXVMA; ++i) {
+    vma = &p->vmas[i];
+    if (addr >= vma->addr && addr < vma->addr + vma->len) {
+      break;
+    }
+  }
+  if (i == MAXVMA || addr + len > vma->addr + vma->len || (addr != vma->addr && addr + len != vma->addr + vma->len))
+    return -1;
+  // if not allocated for the address, do nothing
+  if (walkaddr(p->pagetable, addr) == 0)
+    return 0;
+  // write back dirty page, here assume all the pages to write are dirty
+  if (writeback(vma, addr, len) < 0 ){
+      printf("return -1\n");
+    return -1;
+  }
+  if (addr == vma->addr) {
+    uvmunmap(p->pagetable, addr, len / PGSIZE, 1);
+    if (addr + len == vma->addr + vma->len){
+      fileclose(vma->file);
+      vma->used = 0;
+    }
+  } else
+    uvmunmap(p->pagetable, PGROUNDUP(addr), len / PGSIZE, 1);
+  return 0;
+}
+
+
+
+
+

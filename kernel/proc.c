@@ -21,6 +21,7 @@ static void freeproc(struct proc *p);
 
 extern char trampoline[]; // trampoline.S
 
+extern int writeback(struct VMA *vma, uint64 addr, int n);
 
 // Allocate a page for each process's kernel stack.
 // Map it high in memory, followed by an invalid
@@ -295,7 +296,22 @@ fork(void)
     if(p->ofile[i])
       np->ofile[i] = filedup(p->ofile[i]);
   np->cwd = idup(p->cwd);
-
+  
+  struct VMA *vma, *vma2;
+  for (i = 0; i < MAXVMA; ++i) {
+    vma = &p->vmas[i];
+    if (vma->used == 1) {
+      vma2 = &np->vmas[i];
+      vma2->used = vma->used;
+      vma2->addr = vma->addr;
+      vma2->len = vma->len;
+      vma2->prot = vma->prot;
+      vma2->flag = vma->flag;
+      vma2->file = vma->file;
+      filedup(vma2->file);
+      vma2->off = vma->off;
+    }
+  }
   safestrcpy(np->name, p->name, sizeof(p->name));
 
   pid = np->pid;
@@ -343,7 +359,17 @@ exit(int status)
 
   if(p == initproc)
     panic("init exiting");
-
+  struct VMA *vma;
+  for (int i = 0; i < MAXVMA; ++i) {
+    vma = &p->vmas[i];
+    if (vma->used) {
+      writeback(vma, vma->addr, vma->len);
+      uvmunmap(p->pagetable, vma->addr, vma->len / PGSIZE, 1);
+      fileclose(vma->file);
+      vma->used = 0;
+    }
+  }
+  
   // Close all open files.
   for(int fd = 0; fd < NOFILE; fd++){
     if(p->ofile[fd]){

@@ -114,7 +114,7 @@ mmap_test(void)
   if (p == MAP_FAILED)
     err("mmap (1)");
   _v1(p);
-  if (munmap(p, PGSIZE*2) == -1)
+  if (munmap(p, PGSIZE*2) == (void*)-1)
     err("munmap (1)");
 
   printf("test mmap f: OK\n");
@@ -130,7 +130,7 @@ mmap_test(void)
   _v1(p);
   for (i = 0; i < PGSIZE*2; i++)
     p[i] = 'Z';
-  if (munmap(p, PGSIZE*2) == -1)
+  if (munmap(p, PGSIZE*2) == (void*)-1)
     err("munmap (2)");
 
   printf("test mmap private: OK\n");
@@ -167,11 +167,9 @@ mmap_test(void)
   // write the mapped memory.
   for (i = 0; i < PGSIZE*2; i++)
     p[i] = 'Z';
-
   // unmap just the first two of three pages of mapped memory.
-  if (munmap(p, PGSIZE*2) == -1)
+  if (munmap(p, PGSIZE*2) == (void*)-1)
     err("munmap (3)");
-  
   printf("test mmap read/write: OK\n");
   
   printf("test mmap dirty\n");
@@ -193,11 +191,10 @@ mmap_test(void)
   printf("test mmap dirty: OK\n");
 
   printf("test not-mapped unmap\n");
-  
   // unmap the rest of the mapped memory.
-  if (munmap(p+PGSIZE*2, PGSIZE) == -1)
+  if (munmap(p+PGSIZE*2, PGSIZE) == (void*)-1) {
     err("munmap (4)");
-
+  }
   printf("test not-mapped unmap: OK\n");
     
   printf("test mmap two files\n");

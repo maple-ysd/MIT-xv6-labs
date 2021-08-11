@@ -5,6 +5,9 @@
 #include "spinlock.h"
 #include "proc.h"
 #include "defs.h"
+#include "sleeplock.h"
+#include "fs.h"
+#include "file.h"
 
 struct spinlock tickslock;
 uint ticks;
@@ -65,6 +68,47 @@ usertrap(void)
     intr_on();
 
     syscall();
+  } else if (r_scause() == 13 || r_scause() == 15) {
+    uint64 va = r_stval();
+    if (va >= p->sz) //  || va < p->trapframe->sp)
+      p->killed = 1;
+    else {
+      char *mem;
+      mem = kalloc();
+      if(mem == 0)
+        p->killed = 1;
+      else {
+        memset(mem, 0, PGSIZE);
+        struct VMA *vma;
+        int i;
+        for (i = 0; i < MAXVMA; ++i) {
+          vma = &p->vmas[i];
+          if (va >= vma->addr && va < vma->addr + vma->len) {
+            break;
+          }
+        }
+        if (i == MAXVMA) {
+          kfree(mem);
+          exit(-1);
+        }
+        // if pagefault due to writing a page without write permit, then you will not want to panic
+        if (r_scause() == 15 && !((vma->prot << 1) & PTE_W)) {
+          kfree(mem);
+          exit(-1);
+        }
+        if(mappages(p->pagetable, PGROUNDDOWN(va), PGSIZE, (uint64)mem, (vma->prot << 1) | PTE_U) != 0){
+          kfree(mem);
+          p->killed = 1;
+        }
+        ilock(vma->file->ip);
+        if (readi(vma->file->ip, 1, PGROUNDDOWN(va), PGROUNDDOWN(va) - vma->addr, PGSIZE) == 0) {
+          iunlock(vma->file->ip);
+          kfree(mem);
+          exit(-1);
+        }
+        iunlock(vma->file->ip); 
+      }  
+    }
   } else if((which_dev = devintr()) != 0){
     // ok
   } else {

@@ -12,6 +12,7 @@
 #include "file.h"
 #include "stat.h"
 #include "proc.h"
+#include "fcntl.h"
 
 struct devsw devsw[NDEV];
 struct {
@@ -180,3 +181,65 @@ filewrite(struct file *f, uint64 addr, int n)
   return ret;
 }
 
+int
+writeback(struct VMA *vma, uint64 addr, int n)
+{
+  if (vma->flag == MAP_PRIVATE)
+    return 0;
+  int r, ret = 0;
+  struct file *f = vma->file;
+  if(f->writable == 0){
+    return -1;
+  }
+  int max = ((MAXOPBLOCKS-1-1-2) / 2) * BSIZE;
+  int i = 0;
+  
+  while(i < n){
+    int n1 = n - i;
+    if(n1 > max)
+      n1 = max;
+
+    begin_op();
+    ilock(f->ip);
+    r = writei(f->ip, 1, addr + i, vma->off - vma->addr + addr + i, n1);
+    iunlock(f->ip);
+    end_op();
+   
+    if(r != n1){
+      // error from writei
+      break;
+    }
+    i += r;
+  }
+  ret = (i == n ? n : -1);
+  return ret;
+}/*
+void
+writeback(struct vma* v, uint64 addr, int n)
+{
+  if(!(v->permission & PTE_W) || (v->flags & MAP_PRIVATE)) // no need to writeback
+    return;
+
+  if((addr % PGSIZE) != 0)
+    panic("unmap: not aligned");
+
+  printf("starting writeback: %p %d\n", addr, n);
+
+  struct file* f = v->file;
+
+  int max = ((MAXOPBLOCKS-1-1-2) / 2) * BSIZE;
+  int i = 0;
+  while(i < n){
+    int n1 = n - i;
+    if(n1 > max)
+      n1 = max;
+
+    begin_op();
+    ilock(f->ip);
+    printf("%p %d %d\n",addr + i, v->off + v->start - addr, n1);
+    int r = writei(f->ip, 1, addr + i, v->off + v->start - addr + i, n1);
+    iunlock(f->ip);
+    end_op();
+    i += r;
+  }
+}*/
